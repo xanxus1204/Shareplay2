@@ -21,6 +21,8 @@ class SecondViewController: UIViewController,MCSessionDelegate,MPMediaPickerCont
     
     var peerNameArray:[String] = []
     
+    private var recvData:Data!
+    
    private var toPlayItem:MPMediaItem!
     
    private var player:AVAudioPlayer!
@@ -36,6 +38,7 @@ class SecondViewController: UIViewController,MCSessionDelegate,MPMediaPickerCont
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         session.delegate = self
+        recvData = Data()
        
     }
     
@@ -93,7 +96,26 @@ class SecondViewController: UIViewController,MCSessionDelegate,MPMediaPickerCont
     // ピアからデータを受信したとき.
     
     public func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID){
-          }
+        if (NSString(data: data, encoding: String.Encoding.utf8.rawValue) == "end"){
+            print("受信完了")
+             let docDir = NSSearchPathForDirectoriesInDomains(FileManager.SearchPathDirectory.documentDirectory, FileManager.SearchPathDomainMask.allDomainsMask, true)[0]
+            let path = docDir + "/test.mp3"
+            print(path)
+            let manager = FileManager.default
+            
+            manager.createFile(atPath: path, contents: recvData, attributes: nil)
+            recvData = Data()
+           let player = AudioQueuePlayer()
+            player.prepareAudioQueue(NSURL(fileURLWithPath: path) as URL!)
+            player.play()
+        }else{
+            
+                recvData.append(data)
+
+            
+            
+        }
+    }
     
     
     // ピアからストリームを受信したとき.
@@ -133,6 +155,10 @@ class SecondViewController: UIViewController,MCSessionDelegate,MPMediaPickerCont
                 tempData = NSMutableData(bytes: buf, length: splitDataSize)
                 do {
                     try session.send(tempData as Data, toPeers: session.connectedPeers, with: MCSessionSendDataMode.reliable)
+                    let finish = "end"
+                    let finData = finish.data(using: String.Encoding.utf8)
+                    try session.send(finData! as Data, toPeers: session.connectedPeers, with: MCSessionSendDataMode.reliable)
+                    
                 }catch{
                     
                     print("Send Failed")
