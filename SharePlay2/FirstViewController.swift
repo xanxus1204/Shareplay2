@@ -56,13 +56,14 @@ class FirstViewController: UIViewController,UITextFieldDelegate,UITableViewDataS
     @IBAction func createBtnTapped(_ sender: AnyObject) {
         
         if self.textField.text != nil{
-            startClientWithName(name: headName + self.textField.text!)
+                        startServerWithName(name: headName + self.textField.text!)
         }
     }
     
     @IBAction func searchBtnTapped(_ sender: AnyObject) {
         if self.textField.text != nil{
-            startServerWithName(name: headName + self.textField.text!)
+            startClientWithName(name: headName + self.textField.text!)
+
         }
             }
     @IBAction func startBtnTapped(_ sender: AnyObject) {

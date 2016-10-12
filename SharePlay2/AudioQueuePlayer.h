@@ -9,18 +9,31 @@
 #import <AudioToolbox/AudioToolbox.h>
 
 @interface AudioQueuePlayer: NSObject {
-    AudioQueueRef audioQueueObject;    //使用するAudio Queueオブジェクト
-    AudioFileID   audioFileID;         //再生するサウンドファイル
-    UInt32        numPacketsToRead;    //何パケットずつ読み込むか
-    SInt64        startingPacketCount; //現在の読み込み位置
-    BOOL          donePlayingFile;     //サウンドファイルのすべてを読み終わったか
+    AudioQueueRef audioQueueObject;
+    SInt64 currentFrame;
+    AudioStreamBasicDescription audioFormat;
+    BOOL donePlayingFile;
+    BOOL isPrepared;
+    BOOL isPlaying;
+    AudioQueueTimelineRef timeline;
+    SInt64 frameOffset;
+    
 }
+-(SInt64)currentPosition;
+-(void)setCurrentPosition:(SInt64)position;
 
-@property UInt32       numPacketsToRead;
-@property AudioFileID  audioFileID;
-@property SInt64       startingPacketCount;
-@property BOOL         donePlayingFile;
+@property SInt64 totalFrames;
+@property BOOL isDone;
+@property UInt32 numPacketsToRead;
+@property AudioFileID audioFileID;
+@property SInt64 startingPacketCount;
+@property BOOL isVBR;
+@property NSURL *url;
 
--(void)prepareAudioQueue:(NSURL *)url; //Audio Queueの準備用メソッド
--(void)play;              //再生
+
+-(void)play;
+-(void)stop:(BOOL)shouldStopImmediate;
+-(void)initializeAudioQueue:(NSURL *)url2;
+-(void)prepareBuffer;
+      //再生
 @end

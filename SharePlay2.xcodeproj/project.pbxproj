@@ -15,7 +15,6 @@
 		43D4E2571D9CBADB005631E5 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 43D4E2551D9CBADB005631E5 /* LaunchScreen.storyboard */; };
 		43D4E25F1D9CF387005631E5 /* SecondViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D4E25E1D9CF387005631E5 /* SecondViewController.swift */; };
 		BB6DE8D91DABB95600384CEF /* AudioQueuePlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = BB6DE8D81DABB95600384CEF /* AudioQueuePlayer.m */; };
-		BB6DE8DA1DABBADB00384CEF /* AudioQueuePlayer.h in Sources */ = {isa = PBXBuildFile; fileRef = BB6DE8D71DABB95600384CEF /* AudioQueuePlayer.h */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -152,7 +151,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BB6DE8DA1DABBADB00384CEF /* AudioQueuePlayer.h in Sources */,
 				43D4E25F1D9CF387005631E5 /* SecondViewController.swift in Sources */,
 				430D43041DA349F80090465A /* AudioExporter.swift in Sources */,
 				BB6DE8D91DABB95600384CEF /* AudioQueuePlayer.m in Sources */,

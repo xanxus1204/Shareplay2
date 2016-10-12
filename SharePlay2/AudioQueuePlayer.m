@@ -11,108 +11,192 @@
 @implementation AudioQueuePlayer
 
 
-@synthesize numPacketsToRead;
-@synthesize audioFileID;
-@synthesize startingPacketCount;
-@synthesize donePlayingFile;
-
 static void outputCallback(void *                  inUserData,
                            AudioQueueRef           inAQ,
                            AudioQueueBufferRef     inBuffer){
-    AudioQueuePlayer *player = (__bridge AudioQueuePlayer*)inUserData;
-	UInt32 numPackets = player.numPacketsToRead;
+    AudioQueuePlayer *player = [[AudioQueuePlayer alloc]init];
+    player = (__bridge AudioQueuePlayer*)inUserData;
+    if(player.isDone){
+        return;
+    }
+    
+    UInt32 numPackets = player.numPacketsToRead;
     UInt32 numBytes;
-    //numPackets分 packetを読み込み
-    AudioFileReadPacketData(player.audioFileID,
+    AudioFileReadPackets(player.audioFileID,
                             NO,
                             &numBytes,
-                            inBuffer -> mPacketDescriptions,
+                            inBuffer->mPacketDescriptions,
                             player.startingPacketCount,
                             &numPackets,
-                            inBuffer -> mAudioData);
-		
-	if (numPackets > 0) {
-        //AudioQueueBufferRefにパケットデータサイズを渡す
+                            inBuffer->mAudioData);
+    
+    if (numPackets > 0){
         inBuffer->mAudioDataByteSize = numBytes;
         inBuffer->mPacketDescriptionCount = numPackets;
-        //inBufferをEnqueueする
-		AudioQueueEnqueueBuffer(inAQ,inBuffer, 0, NULL);
-        //読み込み位置をインクリメント
+        AudioQueueEnqueueBuffer(inAQ,
+                                inBuffer,
+                                player.isVBR ? numPackets : 0, //VBRの場合はパケット数とASPDを渡す
+                                player.isVBR ? inBuffer->mPacketDescriptions : NULL);
         player.startingPacketCount += numPackets;
-	}else {//再生するパケットが無ければ終了する        
-        if(!player.donePlayingFile){
-            NSLog(@"stop");
-            AudioQueueStop(inAQ, NO);
-            player.donePlayingFile = YES;
-        }
-	}
-}
-
-
--(id)init{
-    self = [super init];
-    if (self != nil) {
-        
+    }else{
+        player.startingPacketCount = 0;
+        outputCallback(inUserData,inAQ,inBuffer);
     }
-    return self;
 }
 
 
--(void)prepareAudioQueue:(NSURL *)url{
-    donePlayingFile = NO;
+
+
+
+-(void)setMagicCookie:(AudioFileID)audiofile to:(AudioQueueRef)audioQueue{
+    UInt32 propertySize = sizeof(UInt32);
+    AudioFileGetPropertyInfo(audiofile,
+                             kAudioFilePropertyMagicCookieData,
+                             &propertySize,
+                             NULL);
+    if(propertySize){
+        char *cookie =(char*)malloc(propertySize);
+        AudioFileGetProperty(audiofile,
+                             kAudioFilePropertyMagicCookieData,
+                             &propertySize,
+                             cookie);
+        
+        AudioQueueSetProperty(audioQueue,
+                              kAudioQueueProperty_MagicCookie,
+                              cookie,
+                              propertySize);
+        free(cookie);
+    }
+}
+
+static UInt32 calcNumPackets(UInt32 framesPerPacket,UInt32 requestFrame){
+    if(framesPerPacket >= requestFrame){
+        return 1;
+    }else{
+        int packets = 2;
+        while(1){
+            UInt32 frames = packets * framesPerPacket;
+            if(frames > requestFrame)break;
+            packets++;
+        }
+        UInt32 sub1 = requestFrame -((packets - 1) * framesPerPacket);
+        UInt32 sub2 = (packets * framesPerPacket) - requestFrame;
+        if(sub1 <= sub2)return packets - 1;
+        return packets;
+    }
+}
+
+
+-(void)setCurrentPosition:(SInt64)position{
+    BOOL playing = isPlaying;
+    [self stop:YES];
+    _startingPacketCount = position / audioFormat.mFramesPerPacket;
+    frameOffset = position;
+    if(playing)[self play];
+}
+
+-(SInt64)currentPosition{
+    AudioTimeStamp timeStamp;
+    AudioQueueGetCurrentTime(audioQueueObject,
+                             timeline,
+                             &timeStamp,
+                             NULL);
+    SInt64 currentSampleTime = (SInt64)timeStamp.mSampleTime + frameOffset;
+    return currentSampleTime % _totalFrames;
+}
+
+-(void)initializeAudioQueue:(NSURL *)url2{
+    _startingPacketCount = 0;
+    frameOffset = 0;
     
+    AudioFileOpenURL((__bridge CFURLRef)url2,
+                     0x01,
+                     kAudioFileWAVEType,
+                     &_audioFileID);
     
-    //[1]パスからAudioFileIDを取得
-    AudioFileOpenURL((__bridge CFURLRef)url,
-                     kAudioFileReadPermission,
-                     kAudioFileAIFFType, //AIFF
-                     &audioFileID);
-    
-    AudioStreamBasicDescription audioFormat;    
     UInt32 size = sizeof(AudioStreamBasicDescription);
     //[2] kAudioFilePropertyDataFormatをキーにAudioStreamBasicDescriptionを取得
-    AudioFileGetProperty (audioFileID,
-                          kAudioFilePropertyDataFormat,
-                          &size,
-                          &audioFormat);
+    AudioFileGetProperty(_audioFileID,
+                         kAudioFilePropertyDataFormat,
+                         &size,
+                         &audioFormat);
     
+    _isVBR = (audioFormat.mBytesPerPacket == 0 || audioFormat.mFramesPerPacket == 0);
+    
+    //[3]Audio Queueオブジェクトを作成
     AudioQueueNewOutput(&audioFormat,
                         outputCallback,
-                        (__bridge void * _Nullable)(self),
+                        (__bridge_retained void * _Nullable)(self),
                         NULL,NULL,0,
                         &audioQueueObject);
     
-    UInt32 maxPacketSize;
-    UInt32 propertySize = sizeof (maxPacketSize);
-    AudioFileGetProperty (audioFileID, 
-                          kAudioFilePropertyPacketSizeUpperBound,
-                          &propertySize,
-                          &maxPacketSize);
+    //timelineを作成
+    AudioQueueCreateTimeline(audioQueueObject, &timeline);
     
-    startingPacketCount = 0;
-    AudioQueueBufferRef buffers[3];
+    //マジッククッキーの対応
+    [self setMagicCookie:_audioFileID to:audioQueueObject];
     
-    //何パケットずつ読み込むか
-    numPacketsToRead = 1024;
-    UInt32 bufferByteSize = numPacketsToRead * maxPacketSize;
+    UInt64 packetCount;
+    UInt32 propertySize = sizeof(UInt64);
+    AudioFileGetProperty(_audioFileID,
+                         kAudioFilePropertyAudioDataPacketCount,
+                         &propertySize,
+                         &packetCount);
     
-    int bufferIndex;
-    for (bufferIndex = 0; bufferIndex < 3; bufferIndex++){
-        AudioQueueAllocateBuffer(audioQueueObject, 
-                                 bufferByteSize,
-                                 &buffers[bufferIndex]);
-        
-        outputCallback ((__bridge void *)(self),audioQueueObject,buffers[bufferIndex]);
+    _totalFrames = packetCount * audioFormat.mFramesPerPacket;
+    
+    if(audioFormat.mFormatID == kAudioFormatLinearPCM){
+        _numPacketsToRead = 2048;
+    }else{
+        _numPacketsToRead = calcNumPackets(audioFormat.mFramesPerPacket, 2048);
     }
 }
 
--(void)play{
-    AudioQueueStart(audioQueueObject, NULL);////再生を開始する
+
+-(void)prepareBuffer{
+    donePlayingFile = NO;
+    _isDone = NO;
+    isPrepared = YES;
+    
+    AudioQueueBufferRef buffers[3];
+    //パケットのサイズを取得
+    UInt32 maxPacketSize;
+    UInt32 propertySize = sizeof(maxPacketSize);
+    AudioFileGetProperty(_audioFileID,
+                         kAudioFilePropertyPacketSizeUpperBound,
+                         &propertySize,
+                         &maxPacketSize);
+    
+    UInt32 bufferByteSize = _numPacketsToRead * maxPacketSize;
+    //バッファをキューに追加
+    BOOL isFormatVBR = (audioFormat.mBytesPerPacket == 0 || audioFormat.mFramesPerPacket == 0);
+    int bufferIndex;
+    for(bufferIndex = 0; bufferIndex < 3; bufferIndex++){
+        AudioQueueAllocateBufferWithPacketDescriptions(audioQueueObject,
+                                                       bufferByteSize,
+                                                       (isFormatVBR ? _numPacketsToRead : 0),
+                                                       &buffers[bufferIndex]);
+        outputCallback((__bridge_retained void *)(self), audioQueueObject, buffers[bufferIndex]);
+        if(donePlayingFile)break;
+    }
 }
 
-- (void)dealloc {
-    AudioFileClose(audioFileID);               //ファイルのクローズ
-    AudioQueueDispose(audioQueueObject, YES);  //キューの破棄
-    
+
+-(void)play{
+    if(!isPrepared)[self prepareBuffer];
+    AudioQueueStart(audioQueueObject, 0);
+    isPlaying = YES;
 }
+
+-(void)stop:(BOOL)shouldStopImmediate{
+    //既にバッファがエンキューされていて、位置が進んでいるので現在の位置に戻す
+    frameOffset = [self currentPosition];
+    _startingPacketCount = frameOffset / audioFormat.mFramesPerPacket;
+    
+    _isDone = YES;
+    AudioQueueStop(audioQueueObject, shouldStopImmediate);
+    isPrepared = NO;
+    isPlaying = NO;
+}
+
 @end

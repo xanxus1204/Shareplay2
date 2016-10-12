@@ -99,14 +99,15 @@ class SecondViewController: UIViewController,MCSessionDelegate,MPMediaPickerCont
         if (NSString(data: data, encoding: String.Encoding.utf8.rawValue) == "end"){
             print("受信完了")
              let docDir = NSSearchPathForDirectoriesInDomains(FileManager.SearchPathDirectory.documentDirectory, FileManager.SearchPathDomainMask.allDomainsMask, true)[0]
-            let path = docDir + "/test.mp3"
+            let path = docDir + "/test.m4a"
             print(path)
             let manager = FileManager.default
             
             manager.createFile(atPath: path, contents: recvData, attributes: nil)
             recvData = Data()
            let player = AudioQueuePlayer()
-            player.prepareAudioQueue(NSURL(fileURLWithPath: path) as URL!)
+            player.initializeAudioQueue(NSURL(fileURLWithPath: path) as URL!)
+            player.prepareBuffer()
             player.play()
         }else{
             
