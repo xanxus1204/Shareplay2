@@ -9,6 +9,15 @@
 
 
 @implementation AudioQueuePlayer
+//static void checkError(OSStatus err,const char *message){
+//    if(err){
+//        char property[5];
+//        *(UInt32 *)property = CFSwapInt32HostToBig(err);
+//        property[4] = '\0';
+//        NSLog(@"%s = %-4.4s,%d",message, property,(int)err);
+//        exit(1);
+//    }
+//}
 
 
 static void outputCallback(void *                  inUserData,
@@ -48,26 +57,6 @@ static void outputCallback(void *                  inUserData,
 
 
 
--(void)setMagicCookie:(AudioFileID)audiofile to:(AudioQueueRef)audioQueue{
-    UInt32 propertySize = sizeof(UInt32);
-    AudioFileGetPropertyInfo(audiofile,
-                             kAudioFilePropertyMagicCookieData,
-                             &propertySize,
-                             NULL);
-    if(propertySize){
-        char *cookie =(char*)malloc(propertySize);
-        AudioFileGetProperty(audiofile,
-                             kAudioFilePropertyMagicCookieData,
-                             &propertySize,
-                             cookie);
-        
-        AudioQueueSetProperty(audioQueue,
-                              kAudioQueueProperty_MagicCookie,
-                              cookie,
-                              propertySize);
-        free(cookie);
-    }
-}
 
 static UInt32 calcNumPackets(UInt32 framesPerPacket,UInt32 requestFrame){
     if(framesPerPacket >= requestFrame){
@@ -111,7 +100,7 @@ static UInt32 calcNumPackets(UInt32 framesPerPacket,UInt32 requestFrame){
     
     AudioFileOpenURL((__bridge CFURLRef)url2,
                      0x01,
-                     kAudioFileWAVEType,
+                     kAudioFileM4AType,
                      &_audioFileID);
     
     UInt32 size = sizeof(AudioStreamBasicDescription);
@@ -133,8 +122,7 @@ static UInt32 calcNumPackets(UInt32 framesPerPacket,UInt32 requestFrame){
     //timelineを作成
     AudioQueueCreateTimeline(audioQueueObject, &timeline);
     
-    //マジッククッキーの対応
-    [self setMagicCookie:_audioFileID to:audioQueueObject];
+   
     
     UInt64 packetCount;
     UInt32 propertySize = sizeof(UInt64);

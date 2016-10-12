@@ -39,6 +39,22 @@ class SecondViewController: UIViewController,MCSessionDelegate,MPMediaPickerCont
         // Do any additional setup after loading the view, typically from a nib.
         session.delegate = self
         recvData = Data()
+        let audiosession = AVAudioSession.sharedInstance()
+        do {
+            try audiosession.setCategory(AVAudioSessionCategoryPlayback)
+        } catch  {
+            // エラー処理
+            fatalError("カテゴリ設定失敗")
+        }
+        
+        // sessionのアクティブ化
+        do {
+            try audiosession.setActive(true)
+        } catch {
+            // audio session有効化失敗時の処理
+            // (ここではエラーとして停止している）
+            fatalError("session有効化失敗")
+        }
        
     }
     
